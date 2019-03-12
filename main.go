@@ -61,7 +61,6 @@ func waitForMempoolTx(r *rpctest.Harness, txid *chainhash.Hash) error {
 			return fmt.Errorf("timeout after 10s")
 		default:
 		}
-		time.Sleep(100 * time.Millisecond)
 
 		// Check for the harness' knowledge of the txid
 		tx, err = r.Node.GetRawTransaction(txid)
@@ -78,6 +77,8 @@ func waitForMempoolTx(r *rpctest.Harness, txid *chainhash.Hash) error {
 		if tx != nil && tx.MsgTx().TxHash() == *txid {
 			found = true
 		}
+
+		time.Sleep(10 * time.Millisecond)
 	}
 	return nil
 }
@@ -191,7 +192,7 @@ func test(wallet *base.Wallet, miningNode *rpctest.Harness) {
 		PkScript: pkScript,
 		Value:    dcrutil.AtomsPerCoin,
 	}
-	nbAttempts := 10
+	nbAttempts := 30
 	netBackend, err := wallet.NetworkBackend()
 	orPanic(err)
 
@@ -209,6 +210,9 @@ func test(wallet *base.Wallet, miningNode *rpctest.Harness) {
 
 		// Create the first tx spending funds from the wallet (this already
 		// publishes the tx).
+		//
+		// This might fail when the tx1 from the previous iteration of the loop
+		// has been published twice.
 		srcTxId, err := wallet.SendOutputs([]*wire.TxOut{&testOut}, 0, 0)
 		orPanic(err)
 		srcTxs, _, err := wallet.GetTransactionsByHashes([]*chainhash.Hash{srcTxId})
@@ -240,9 +244,6 @@ func test(wallet *base.Wallet, miningNode *rpctest.Harness) {
 
 		// Publish the transaction a second time (this should error with
 		// "already have transaction", but that's fine).
-		//
-		// What is _not_ fine is erroring out with a "output ... referenced
-		// from transaction either does not exist or has already been spent".
 		_, err = wallet.PublishTransaction(tx1, serTx1, netBackend)
 		if err != nil {
 			if strings.Contains(err.Error(), "already have transaction") {
